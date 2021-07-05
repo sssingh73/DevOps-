@@ -1,0 +1,31 @@
+# File: variables.yml
+variables: 
+  ProjectName: test
+  RGProjectName: TestApp
+  Sandbox: Sandbox
+  DevTest: DevTest
+  UAT: UAT
+  PROD: UAT #Prod using UAT as PRod is not yet created for Test app
+  ResourceGroup : 'Corp-$(RGProjectName)-AppResources-$(environment)'  
+  BuildConfiguration: Release   
+  VSTSFeed: 'xxxxxxxxxxxxxxxxxxxxx'  #Your Feed ID
+  Location: North Europe
+
+  RepoName: 'devops-repo-armtemplat'  #Repo of the branch which contains templates are present
+  BranchName: AllTemplates  #BranchName in which the templates are present
+ 
+  
+  #Web app project specific variables
+  WebAppName: testappyaml
+  OverrideParametersSandbox: -webSiteName "testappyaml-web-sandbox" -hostingPlanName "hostingplan" -appInsightsName "appinsightname" -location "North Europe" -allowedAudience $(AllowAudience) -clientSecret $(clntSecret) -sites_WebApp_clientId $(clntId) -configureAAD true
+  OverrideParametersDevTest: -webSiteName "testapp-web-devtest" -hostingPlanName "hostingplan" -appInsightsName "appinsightname" -location "North Europe" -allowedAudience $(AllowAudience) -clientSecret $(clntSecret) -sites_WebApp_clientId $(clntId) -configureAAD true
+  OverrideParametersUAT: -webSiteName "testapp-web-uat" -hostingPlanName "hostingplan" -appInsightsName "appinsightname" -location "North Europe" -allowedAudience $(AllowAudience) -clientSecret $(clntSecret) -sites_WebApp_clientId $(clntId) -configureAAD true
+  OverrideParametersProd: -webSiteName "testapp-web-prod" -hostingPlanName "hostingplan" -appInsightsName "appinsightname" -location "North Europe" -allowedAudience $(AllowAudience) -clientSecret $(clntSecret) -sites_WebApp_clientId $(clntId) -configureAAD true
+  WebARMTemplate: $(Build.SourcesDirectory)/ARMTemplates/WebAppTemplate/WebSite.json
+  WebParameters: $(Build.SourcesDirectory)/ARMTemplates/WebAppTemplate/WebSite.parameters.json
+  AppType: webApp
+  DropPath: '$(System.DefaultWorkingDirectory)/drop/test_App.zip'
+  JSONFiles: '**/appsettings.json'
+  SolutionFile: '**/test_App.sln' #Based on the  solution structure use project  or solution e.g.  Use Project location in case sln is having other projects like database etc.
+  
+  

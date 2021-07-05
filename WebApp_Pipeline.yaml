@@ -1,0 +1,236 @@
+resources:
+  repositories:
+  - repository: MyGitHubRepo # The name used to reference this repository in the checkout step
+    type: github  # githubenterprise or github based on the github source type
+    endpoint: Test-GitHub  #Update your Github connection name here
+    name: devops-repo-armtemplate #Update your repo
+    ref: AllTemplates # branch name
+pr:
+- dev
+- master
+
+trigger:
+- dev
+- master
+
+
+variables:
+- template: variables.yaml  
+stages:
+- stage: Build
+  jobs:
+    - job: Build
+
+      pool:
+        name: Azure Pipelines
+        vmImage: 'vs2017-win2016'      
+
+      steps:
+      - task: DotNetCoreCLI@2
+        displayName: Restore
+        inputs:
+          command: restore
+          projects: '**/*.csproj'
+          vstsFeed: '$(VSTSFeed)'
+
+      - task: DotNetCoreCLI@2
+        displayName: Build
+        inputs:
+          projects: '$(SolutionFile)'
+
+      - task: DotNetCoreCLI@2
+        displayName: Test
+        inputs:
+          command: test
+        enabled: false
+
+      #- template: CoberturaCodeCoverage.yaml # name of template to include
+     
+      - task: DotNetCoreCLI@2
+        displayName: Publish
+        inputs:
+          command: publish
+          arguments: '--configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)'
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifact: drop'
+
+- stage: Sandbox
+  condition: and(and(succeeded(), ne(variables['build.sourceBranch'], 'refs/heads/dev')),and(succeeded(), ne(variables['build.sourceBranch'], 'refs/heads/master')),and(succeeded(),ne(variables['Build.Reason'], 'PullRequest')))
+  jobs:
+    - job: Sandbox
+
+      pool:
+        name: Azure Pipelines
+        vmImage: 'vs2017-win2016'      
+   # Add your configuration substutions here by uncommenting this
+      #variables:
+      #  AccountName: companionappmssandbox
+      #  BlobConnection: $(BlobConn)
+      steps:
+      - checkout: MyGitHubRepo
+      
+      - task: DownloadBuildArtifacts@0
+        inputs:
+          buildType: 'current'      
+          downloadType: 'single'
+          downloadPath: '$(System.DefaultWorkingDirectory)'
+          artifactName: 'drop'
+      
+      - task: AzureResourceGroupDeployment@2
+        displayName: 'Azure Deployment:Create Or Update Resource Group action on Corp-$(RGProjectName)-AppResources-$(Sandbox)'
+        inputs:
+          azureSubscription: '$(ProjectName)-Azure-$(Sandbox)'
+          resourceGroupName: 'Corp-$(RGProjectName)-AppResources-$(Sandbox)'
+          location: '$(Location)'
+          csmFile: $(WebARMTemplate)
+          csmParametersFile: $(WebParameters)
+          overrideParameters: '$(OverrideParametersSandbox)'
+      
+      - task: AzureRmWebAppDeployment@4
+        displayName: 'Deploy Azure App Service'
+        inputs:
+          azureSubscription: '$(ProjectName)-Azure-$(Sandbox)'
+          appType: webApp
+          WebAppName: '$(WebAppName)-web-$(Sandbox)'
+          packageForLinux: $(DropPath)
+          enableCustomDeployment: true
+          TakeAppOfflineFlag: false
+          ExcludeFilesFromAppDataFlag: false
+          JSONFiles: '$(JSONFiles)'
+- stage: Dev
+  dependsOn: 'Build'
+  condition: and(succeeded(), eq(variables['build.sourceBranch'], 'refs/heads/dev'))
+    
+  jobs: 
+  - job: Dev
+    pool:
+      name: Azure Pipelines
+      vmImage: 'vs2017-win2016'
+    # variables:
+      #project specfic substitutions need to add for environment specific
+      # AccountName: 'testvariable'
+    
+
+    steps:
+    - checkout: MyGitHubRepo
+    
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current' 
+        downloadType: 'single'
+        downloadPath: '$(System.DefaultWorkingDirectory)'
+        artifactName: 'drop'
+    
+    - task: AzureResourceGroupDeployment@2
+      displayName: 'Azure Deployment:Create Or Update Resource Group action on Corp-$(RGProjectName)-AppResources-$(DevTest)'
+      inputs:
+        azureSubscription: '$(ProjectName)-Azure-$(DevTest)'
+        resourceGroupName: 'Corp-$(RGProjectName)-AppResources-$(DevTest)'
+        location: '$(Location)'
+        csmFile: $(WebARMTemplate)
+        csmParametersFile: $(WebParameters)
+        overrideParameters: '$(OverrideParametersDevTest)'
+    
+    - task: AzureRmWebAppDeployment@4
+      displayName: 'Deploy Azure App Service'
+      inputs:
+        azureSubscription: '$(ProjectName)-Azure-$(DevTest)'
+        appType: 'webApp'
+        WebAppName: '$(WebAppName)-web-$(DevTest)'
+        packageForLinux: '$(DropPath)'
+        enableCustomDeployment: true
+        TakeAppOfflineFlag: false
+        ExcludeFilesFromAppDataFlag: false
+        JSONFiles: '$(JSONFiles)'
+- stage: UAT
+  dependsOn: 'Dev'
+  jobs:  
+    - deployment: "UAT"
+      
+      pool: 
+        name: Azure Pipelines
+        vmImage: 'vs2017-win2016'
+      
+     
+      environment: "UAT"
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: MyGitHubRepo            
+            - task: DownloadBuildArtifacts@0
+              inputs:
+                buildType: 'current'      
+                downloadType: 'single'
+                downloadPath: '$(System.DefaultWorkingDirectory)'
+                artifactName: 'drop'
+            
+            - task: AzureResourceGroupDeployment@2
+              displayName: 'Azure Deployment:Create Or Update Resource Group action on Corp-$(RGProjectName)-AppResources-$(UAT)'
+              inputs:
+                azureSubscription: '$(ProjectName)-Azure-$(UAT)'
+                resourceGroupName: 'Corp-$(RGProjectName)-AppResources-$(UAT)'
+                location: '$(Location)'
+                csmFile: $(WebARMTemplate)
+                csmParametersFile: $(WebParameters)
+                overrideParameters: '$(OverrideParametersUAT)'
+   
+            
+            - task: AzureRmWebAppDeployment@4
+              displayName: 'Deploy Azure App Service'
+              inputs:
+                azureSubscription: '$(ProjectName)-Azure-$(UAT)'
+                appType: 'webApp'
+                WebAppName: '$(WebAppName)-web-$(UAT)'
+                packageForLinux: '$(DropPath)'
+                enableCustomDeployment: true
+                TakeAppOfflineFlag: false
+                ExcludeFilesFromAppDataFlag: false
+                JSONFiles: '$(JSONFiles)'
+- stage: Prod
+  dependsOn: 'Build'
+  condition: and(succeeded(), eq(variables['build.sourceBranch'], 'refs/heads/master'))
+  jobs:  
+    - deployment: "PROD"
+      
+      pool: 
+        name: Azure Pipelines
+        vmImage: 'vs2017-win2016'
+    
+     
+      environment: "PROD"
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: MyGitHubRepo            
+            - task: DownloadBuildArtifacts@0
+              inputs:
+                buildType: 'current'      
+                downloadType: 'single'
+                downloadPath: '$(System.DefaultWorkingDirectory)'
+                artifactName: 'drop'
+            
+            - task: AzureResourceGroupDeployment@2
+              displayName: 'Azure Deployment:Create Or Update Resource Group action on Corp-$(RGProjectName)-AppResources-$(PROD)'
+              inputs:
+                azureSubscription: '$(ProjectName)-Azure-$(PROD)'
+                resourceGroupName: 'Corp-$(RGProjectName)-AppResources-$(PROD)'
+                location: '$(Location)'
+                csmFile: $(WebARMTemplate)
+                csmParametersFile: $(WebParameters)
+                overrideParameters: '$(OverrideParametersProd)'
+   
+            
+            - task: AzureRmWebAppDeployment@4
+              displayName: 'Deploy Azure App Service'
+              inputs:
+                azureSubscription: '$(ProjectName)-Azure-$(PROD)'
+                appType: 'webApp'
+                WebAppName: '$(WebAppName)-web-$(PROD)'
+                packageForLinux: '$(DropPath)'
+                enableCustomDeployment: true
+                TakeAppOfflineFlag: false
+                ExcludeFilesFromAppDataFlag: false
+                JSONFiles: '$(JSONFiles)'
