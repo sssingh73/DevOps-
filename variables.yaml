@@ -28,4 +28,7 @@ variables:
   JSONFiles: '**/appsettings.json'
   SolutionFile: '**/test_App.sln' #Based on the  solution structure use project  or solution e.g.  Use Project location in case sln is having other projects like database etc.
   
-  
+  #StorageAccount deployment parameters
+  SAARMTemplate: ARMTemplates/StorageAccount/azuredeploy.json
+  SAParameter: ARMTemplates/StorageAccount/azuredeploy.parameters.json
+  SAOverrideParameters: -StorageAccountName  "$(StorageAccountName)" -Location "$(Location)" -Container1Name "$(Container1Name)" -Container2Name "$(Container2Name)" -AccessTier "$(AccessTier)"
