@@ -1,0 +1,295 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "db-sqlsvrName": {
+
+      "type": "String"
+    },
+    "db-sqldbName": {
+
+      "type": "String"
+    },
+    "location": {
+      "type": "String"
+    },
+    "sqldbCollation": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "SQL_Latin1_General_CP1_CI_AS"
+    },
+    "sqldbEdition": {
+      "type": "string",
+      "defaultValue": "Basic",
+      "allowedValues": [
+        "Basic",
+        "Standard",
+        "Premium"
+      ]
+    },
+    "ServiceObjectiveName": {
+      "type": "string",
+      "defaultValue": "Basic",
+      "allowedValues": [
+        "Basic",
+        "S0",
+        "S1",
+        "S2",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "metadata": {
+        "description": "Describes the performance level for Edition"
+      }
+    },
+    "db-sqlsvrAdminLogin": {
+      "type": "string",
+      "minLength": 1
+    },
+    "db-sqlsvrAdminLoginPassword": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Specifies the object ID of a user, service principal or security group in the Azure Active Directory tenant for the vault. The object ID must be unique for the list of access policies. Get it by using Get-AzADUser or Get-AzADServicePrincipal cmdlets."
+      }
+    },
+    "adminMailID": {
+      "type": "string",
+      "metadata": {
+        "description": "Specifies the email id of the administrator login"
+      }
+    },
+    "StorageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage Account name should be with unique name"
+      }
+    },
+    "enableADS": {
+      "defaultValue": false,
+      "type": "bool",
+      "metadata": {
+        "description": "Enable Advanced Threat Protection."
+      }
+    },
+    "emailAddresses": {
+      "type": "array",
+      "metadata": {
+        "description": "Email addresses to receive alerts and scan reports"
+      }
+    },
+    "emailAdmins": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Email service and co-administrators"
+      }
+    }
+  },
+  "variables": {
+    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "name": "[parameters('StorageAccountName')]",
+      "location": "[parameters('Location')]",
+      "tags": {
+        "displayName": "[parameters('StorageAccountName')]"
+      },
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+	   "allowBlobPublicAccess": false,
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "enabled": false
+        },
+        "accessTier": "Hot"
+
+      },
+      "resources": [
+        {
+          "type": "blobServices/containers",
+          "apiVersion": "2019-06-01",
+          "name": "[concat('default/', 'vulnerability-assessment')]",
+          "dependsOn": [
+            "[parameters('StorageAccountName')]"
+          ],
+          "properties": {
+            "publicAccess": "None"
+          }
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2019-06-01-preview",
+      "name": "[parameters('db-sqlsvrName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "displayName": "[parameters('db-sqlsvrName')]"
+      },
+      "kind": "v12.0",
+      "properties": {
+        "administratorLogin": "[parameters('db-sqlsvrAdminLogin')]",
+        "administratorLoginPassword": "[parameters('db-sqlsvrAdminLoginPassword')]",
+        "version": "12.0",
+        "minimalTlsVersion": "1.2",
+        "publicNetworkAccess": "Enabled"
+      },
+      "resources": [
+        {
+          "name": "[parameters('db-sqldbName')]",
+          "type": "databases",
+          "location": "[parameters('location')]",
+          "apiVersion": "2014-04-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "tags": {
+            "displayName": "[parameters('db-sqldbName')]"
+          },
+          "properties": {
+            "collation": "SQL_Latin1_General_CP1_CI_AS",
+            "edition": "Basic",
+            "maxSizeBytes": "2147483648",
+            "requestedServiceObjectiveName": "Basic"
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/databases/backupLongTermRetentionPolicies",
+          "apiVersion": "2017-03-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/', parameters('db-sqldbName'), '/default')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers/databases', parameters('db-sqlsvrName'), parameters('db-sqldbName'))]",
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "properties": {
+            "weeklyRetention": "PT0S",
+            "monthlyRetention": "P5W",
+            "yearlyRetention": "P1Y",
+            "weekOfYear": 1
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies",
+          "apiVersion": "2017-10-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/', parameters('db-sqldbName'), '/default')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers/databases', parameters('db-sqlsvrName'), parameters('db-sqldbName'))]",
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "properties": {
+            "retentionDays": 7
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/administrators",
+          "apiVersion": "2019-06-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/ActiveDirectory')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "properties": {
+            "administratorType": "ActiveDirectory",
+            "login": "[parameters('adminMailID')]",
+            "sid": "[parameters('objectId')]",
+            "tenantId": "[subscription().tenantId]"
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/advisors",
+          "apiVersion": "2014-04-01",
+          "name": "[concat(parameters('db-sqlsvrName'), '/ForceLastGoodPlan')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "properties": {
+            "autoExecuteValue": "Enabled"
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/auditingSettings",
+          "apiVersion": "2017-03-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/Default')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers/databases', parameters('db-sqlsvrName'), parameters('db-sqldbName'))]",
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName'))]"
+          ],
+          "properties": {
+            "state": "Enabled",
+            "storageEndpoint": "[concat('https://', parameters('StorageAccountName'), '.blob.core.windows.net/')]",
+            "retentionDays": 90,
+            "auditActionsAndGroups": [
+              "SUCCESSFUL_DATABASE_AUTHENTICATION_GROUP",
+              "FAILED_DATABASE_AUTHENTICATION_GROUP",
+              "BATCH_COMPLETED_GROUP"
+            ],
+            "storageAccountAccessKey": "[listKeys(variables('storageAccountId'), '2019-04-01').keys[0].value]",
+            "storageAccountSubscriptionId": "[subscription().subscriptionId]",
+            "isStorageSecondaryKeyInUse": false,
+            "isAzureMonitorTargetEnabled": false
+          }
+        },
+        {
+          "type": "Microsoft.Sql/servers/encryptionProtector",
+          "apiVersion": "2015-05-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/current')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+          ],
+          "kind": "servicemanaged",
+          "properties": {
+            "serverKeyName": "ServiceManaged",
+            "serverKeyType": "ServiceManaged"
+          }
+        },
+        {
+          "condition": "[parameters('enableADS')]",
+          "type": "Microsoft.Sql/servers/securityAlertPolicies",
+          "apiVersion": "2017-03-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/Default')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]"
+
+          ],
+          "properties": {
+            "state": "Enabled",
+            "emailAddresses": "[parameters('emailAddresses')]",
+            "emailAccountAdmins": true
+          }
+        },
+        {
+          "condition": "[parameters('enableADS')]",
+          "type": "Microsoft.Sql/servers/vulnerabilityAssessments",
+          "apiVersion": "2018-06-01-preview",
+          "name": "[concat(parameters('db-sqlsvrName'), '/Default')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', parameters('db-sqlsvrName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', parameters('StorageAccountName'))]",
+            "[concat('Microsoft.Sql/servers/', parameters('db-sqlsvrName'), '/securityAlertPolicies/Default')]"
+          ],
+          "properties": {
+            "storageContainerPath": "[concat('https://',concat(parameters('StorageAccountName'),'.blob.core.windows.net/vulnerability-assessment'))]",
+            "recurringScans": {
+              "isEnabled": true,
+              "emailSubscriptionAdmins": true,
+              "emails": "[parameters('emailAddresses')]"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

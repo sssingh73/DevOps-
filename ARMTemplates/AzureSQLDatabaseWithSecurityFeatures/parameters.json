@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "db-sqlsvrName": {
+      "value": "testserver"
+    },
+    "db-sqldbName": {
+      "value": "temp"
+    },
+    "sqldbCollation": {
+      "value": "SQL_Latin1_General_CP1_CI_AS"
+    },
+    "sqldbEdition": {
+      "value": "Basic"
+    },
+    "ServiceObjectiveName": {
+      "value": "Basic"
+    },
+    "StorageAccountName": {
+      "value": "test"
+    },
+    "db-sqlsvrAdminLogin": {
+      "value": "testadmin"
+    },
+    "db-sqlsvrAdminLoginPassword": {
+      "value": "XXX"
+    },
+    "location": {
+      "value": "North Europe"
+    },
+    "adminMailID": {
+      "value": "xxx@xx.com"
+    },
+    "objectId": {
+      "value": "XXXXXX"
+    },
+    "enableADS": {
+      "value": false
+    },
+    "emailAddresses": {
+      "value": [ "XXXX@XX.com" ]
+    }
+  }
+}
