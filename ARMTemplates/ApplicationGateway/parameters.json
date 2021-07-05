@@ -1,0 +1,56 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+  "parameters": {
+    "agw_name": {
+      "value": "gatewayname"
+
+    },
+    "PublicIPName": {
+      "value": "publicipname"
+    },
+    "srv_url": {
+      "value": "serviceurl"
+    },
+    "web_url": {
+      "value": "test-uat.azurewebsites.net"
+    },
+    "host": {
+      "value": "domainname"
+    },
+    "location": {
+      "value": "North Europe"
+    },
+    "vnet_name": {
+      "value": "vnetname"
+    },
+    "IPV4Address": {
+      "value": "10.3.0.0/16"
+    },
+    "SubNet": {
+      "value": "10.3.0.0/16"
+    },
+    "KeyVaultName": {
+      "value": "keyvalutname"
+    },
+    "CertSecretName": {
+      "value": "certsecretname"
+    },
+    "PFXSecretName": {
+      "value": "pfxsecretname"
+    },
+    "WAFMode": {
+      "value": "Prevention" // "value": "Detection"
+    },
+    "PFXName": {
+      "value": "nameofpfxinwaf" // this can be any name to idenfy the pfx in WAF
+    },
+    "CertName": {
+      "value": "nameofcertinwaf" // this can be any name to idenfy the root cert in WAF
+    },
+    "ServiceConfigurationRequired": {
+      "value": false // True will create configuration for Service as well.
+    }
+   
+  }
+}

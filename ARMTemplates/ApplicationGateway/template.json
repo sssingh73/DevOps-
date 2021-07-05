@@ -1,0 +1,523 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "agw_name": {
+      "type": "String"
+    },    
+    "PublicIPName": {
+     "type": "String"
+
+    },
+    "srv_url": {
+      "type": "String",
+      "defaultValue": "empty",
+      "metadata": {
+        "description": "This is an optional parameter"
+      }
+    },
+    "web_url": {
+      "type": "String"
+    },
+    "host": {
+      "type": "String"
+    },
+    "location": {
+      "type": "String"
+    },
+    "vnet_name": {
+      "type": "String"
+    },
+    "IPV4Address": {
+      "type": "String"
+    },
+    "SubNet": {
+      "type": "String"
+    },
+    "KeyVaultName": {
+      "type": "String"
+    },
+    "identityName": {
+      "type": "string",
+      "defaultValue": "[concat('id-', uniqueString(resourceGroup().id))]",
+      "metadata": {
+        "description": "Name of the user assigned identity"
+      }
+    },
+    "CertSecretName": {
+      "type": "String"
+    },
+    "PFXSecretName": {
+      "type": "String"
+    },
+    "WAFMode": {
+      "type": "String"
+    },
+    "CertName": {
+      "type": "String"
+    },
+    "PFXName": {
+      "type": "String"
+    },
+    "ServiceConfigurationRequired": {
+      "defaultValue": false,
+      "type": "bool",
+      "metadata": {
+        "description": "Creates Service configuration."
+      }
+    }
+
+  },
+  "variables": {
+
+    "identityID": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]",
+    "Web-Prob": {
+      "name": "probe-web",
+      "properties": {
+        "protocol": "Https",
+        "host": "[parameters('host')]",
+        "path": "/",
+        "interval": 30,
+        "timeout": 30,
+        "unhealthyThreshold": 3,
+        "pickHostNameFromBackendHttpSettings": false,
+        "minServers": 0,
+        "match": {
+          "statusCodes": [
+            "200-401"
+          ]
+        }
+      }
+    },
+
+    "Web-HttpsSetting": {
+      "name": "http-settings-web",
+      "properties": {
+        "port": 443,
+        "protocol": "Https",
+        "cookieBasedAffinity": "Disabled",
+        "hostName": "[parameters('host')]",
+        "pickHostNameFromBackendAddress": false,
+        "affinityCookieName": "ApplicationGatewayAffinity",
+        "requestTimeout": 20,
+        "probe": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/probes/probe-web')]"
+        },
+        "trustedRootCertificates": [
+          {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/trustedRootCertificates/',parameters('CertName'))]"
+          }
+        ]
+      }
+    },
+    "Web-HttpSetting": {
+      "name": "http-setting-def",
+      "properties": {
+        "port": 80,
+        "protocol": "Http",
+        "cookieBasedAffinity": "Disabled",
+        "pickHostNameFromBackendAddress": false,
+        "requestTimeout": 20
+      }
+    },
+    "Service-HttpsSetting": {
+      "name": "http-setting-api",
+      "properties": {
+        "port": 443,
+        "protocol": "Https",
+        "cookieBasedAffinity": "Disabled",
+        "hostName": "[parameters('srv_url')]",
+        "pickHostNameFromBackendAddress": false,
+        "requestTimeout": 20,
+        "probe": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/probes/prob-api')]"
+        }
+      }
+    },
+    "Service-Prob": {
+
+      "name": "prob-api",
+      "properties": {
+        "protocol": "Https",
+        "path": "/",
+        "interval": 30,
+        "timeout": 30,
+        "unhealthyThreshold": 3,
+        "pickHostNameFromBackendHttpSettings": true,
+        "minServers": 0,
+        "match": {
+          "statusCodes": [
+            "200-401"
+          ]
+        }
+      }
+    },
+
+    "Service-RoutingRule": 
+      {
+
+        "name": "rule-api",
+        "properties": {
+          "ruleType": "Basic",
+          "httpListener": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/httpListeners/listener-444')]"
+          },
+          "backendAddressPool": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/backendAddressPools/backend-pool-api')]"
+          },
+          "backendHttpSettings": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/backendHttpSettingsCollection/http-setting-api')]"
+          }
+        }
+      },
+    "Web-DefRule": {
+      "name": "rule-80",
+      "properties": {
+        "ruleType": "Basic",
+        "httpListener": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/httpListeners/listener-80')]"
+        },
+        "redirectConfiguration": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/redirectConfigurations/rule-80')]"
+        }
+      }
+    },
+    "Web-RoutingRule": 
+      {
+        "name": "rule-web",
+        "properties": {
+          "ruleType": "Basic",
+          "httpListener": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/httpListeners/listener-443')]"
+          },
+          "backendAddressPool": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/backendAddressPools/backend-pool-web')]"
+          },
+          "backendHttpSettings": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/backendHttpSettingsCollection/http-settings-web')]"
+          }
+        }
+      },
+    "Service-Listener": {
+
+      "name": "listener-444",
+      "properties": {
+        "frontendIPConfiguration": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+        },
+        "frontendPort": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendPorts/port_444')]"
+        },
+        "protocol": "Https",
+        "sslCertificate": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/sslCertificates/',parameters('PFXName'))]"
+
+        },
+        "hostNames": [],
+        "requireServerNameIndication": false
+      }
+    },
+    "Web-def-Listener": {
+      "name": "listener-80",
+      "properties": {
+        "frontendIPConfiguration": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+        },
+        "frontendPort": {
+          "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendPorts/port_80')]"
+        },
+        "protocol": "Http",
+        "hostNames": [],
+        "requireServerNameIndication": false
+      }
+    },
+    "Web-Listener": 
+      {
+        "name": "listener-443",
+        "properties": {
+          "frontendIPConfiguration": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+          },
+          "frontendPort": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/frontendPorts/port_443')]"
+
+          },
+          "protocol": "Https",
+          "sslCertificate": {
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/sslCertificates/', parameters('PFXName'))]" //this need to be parameterized
+          },
+          "hostName": "[parameters('host')]",
+          "hostNames": [],
+          "requireServerNameIndication": true
+        }
+      },
+    "Service-Port": {
+
+      "name": "port_444",
+      "properties": {
+        "port": 444
+      }
+    },
+    "Web-def-Port": {
+      "name": "port_80",
+      "properties": {
+        "port": 80
+      }
+    },
+    "Web-Port":
+      {
+        "name": "port_443",
+        "properties": {
+          "port": 443
+        }
+      },
+      
+    "Service-BackendPool":       
+      {
+        "name": "backend-pool-api",
+        "properties": {
+          "backendAddresses": [
+            {
+              "fqdn": "[parameters('srv_url')]"
+            }
+          ]
+        }
+      },
+    "Web-BackendPool": 
+      {
+        "name": "backend-pool-web",
+        "properties": {
+          "backendAddresses": [
+            {
+              "fqdn": "[parameters('web_url')]"
+            }
+          ]
+        }
+      }
+    
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "name": "[parameters('identityName')]",
+      "apiVersion": "2018-11-30",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2016-10-01",
+      "name": "[parameters('KeyVaultName')]",
+      "location": "North Europe",
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]"
+      ],
+      "properties": {
+        "sku": {
+          "name": "standard",
+          "family": "A"
+        },
+        "tenantId": "[reference(variables('identityID')).tenantId]",
+        "createMode": "recover"
+
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/accessPolicies",
+      "name": "[concat(parameters('KeyVaultName'), '/add')]",
+      "location": "North Europe",
+      "apiVersion": "2019-09-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', parameters('KeyVaultName'))]"
+      ],
+      "properties": {
+        "accessPolicies": [
+          {
+            "tenantId": "[reference(variables('identityID')).tenantId]",
+            "objectId": "[reference(variables('identityID')).principalId]",
+            "permissions": {
+              "secrets": [
+                "get"
+              ]
+
+            }
+          }
+        ]
+      }
+    },   
+    {
+      "type": "Microsoft.Network/applicationGateways",
+      "apiVersion": "2020-05-01",
+      "name": "[parameters('agw_name')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnet_name'))]",        
+        "[resourceId('Microsoft.KeyVault/vaults', parameters('KeyVaultName'))]"
+      ],
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[variables('identityID')]": {
+          }
+        }
+      },
+      "properties": {
+        "sku": {
+          "name": "WAF_v2",
+          "tier": "WAF_v2"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGatewayIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnet_name'),'default')]"
+              }
+            }
+          }
+        ],
+        "sslCertificates": [
+          {
+            "name": "[parameters('PFXName')]",
+            "properties": {
+              "keyVaultSecretId": "[concat(reference(parameters('KeyVaultName')).vaultUri,'secrets/',parameters('PFXSecretName'))]"
+
+            }
+          }
+        ],
+        "trustedRootCertificates": [
+          {
+            "name": "[parameters('CertName')]",
+            "properties": {
+              "keyVaultSecretId": "[concat(reference(parameters('KeyVaultName')).vaultUri,'secrets/',parameters('CertSecretName'))]"
+
+            }
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGwPublicFrontendIp",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',parameters('PublicIPName'))]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-Port'),variables('Web-Port'),variables('Web-def-Port')),createArray(variables('Web-Port'),variables('Web-def-Port')))]",
+        "backendAddressPools": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-BackendPool'),variables('Web-BackendPool')),createArray(variables('Web-BackendPool')))]",
+        "backendHttpSettingsCollection": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-HttpsSetting'),variables('Web-HttpsSetting'),variables('Web-HttpSetting')),createArray(variables('Web-HttpsSetting'),variables('Web-HttpSetting')))]", //[
+        "httpListeners": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-Listener'),variables('Web-Listener'),variables('Web-def-Listener')),createArray(variables('Web-Listener'),variables('Web-def-Listener')))]",
+        "urlPathMaps": [],
+        "requestRoutingRules": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-RoutingRule'),variables('Web-RoutingRule'),variables('Web-DefRule')),createArray(variables('Web-RoutingRule'),variables('Web-DefRule')))]",
+        "probes": "[if(parameters('ServiceConfigurationRequired'),createArray(variables('Service-Prob'),variables('Web-Prob')),createArray(variables('Web-Prob')))]",
+
+        "rewriteRuleSets": [],
+        "redirectConfigurations": [
+          {
+            "name": "rule-80",
+            "properties": {
+              "redirectType": "Permanent",
+
+              "targetListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/httpListeners/listener-443')]"
+              },
+              "includePath": true,
+              "includeQueryString": true,
+              "requestRoutingRules": [
+                {
+                  "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('agw_name')), '/requestRoutingRules/rule-80')]"
+                }
+              ]
+            }
+          }
+        ],
+        "privateLinkConfigurations": [],
+        "sslPolicy": {
+          "policyType": "Custom",
+          "minProtocolVersion": "TLSv1_2",
+          "cipherSuites": [
+            //"TLS_RSA_WITH_AES_256_CBC_SHA256", //Fix for WASP issue.
+            //"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384", //Fix for WASP issue.
+            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+            //"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", //Fix for WASP issue.
+            "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+            "TLS_RSA_WITH_AES_128_GCM_SHA256" //,
+            //"TLS_RSA_WITH_AES_128_CBC_SHA256" //Fix for WASP issue.
+          ]
+        },
+        "webApplicationFirewallConfiguration": {
+          "enabled": true,
+          "firewallMode": "[parameters('WAFMode')]", // "Prevention",
+          "ruleSetType": "OWASP",
+          "ruleSetVersion": "3.1",
+          "disabledRuleGroups": [
+            {
+              "ruleGroupName": "REQUEST-920-PROTOCOL-ENFORCEMENT",
+              "rules": [
+                920230 //REQUEST-942-APPLICATION-ATTACK-SQLI
+              ]
+            }
+          ],
+          "exclusions": [
+            {
+              "matchVariable": "RequestArgNames",
+              "selectorMatchOperator": "Contains",
+              "selector": "corp-internal"
+            }
+          ],
+          "requestBodyCheck": true,
+          "maxRequestBodySizeInKb": 128,
+          "fileUploadLimitInMb": 750
+        },
+        "enableHttp2": false,
+        "autoscaleConfiguration": {
+          "minCapacity": 0,
+          "maxCapacity": 4
+        }
+      }
+      },
+      {
+        "type": "Microsoft.Network/virtualNetworks",
+        "apiVersion": "2020-05-01",
+        "name": "[parameters('vnet_name')]",
+        "location": "[parameters('Location')]",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "[parameters('IPV4Address')]" //you do not have your address range overlap with other Virtual Networks
+            ]
+          },
+          "subnets": [
+            {
+              "name": "default",
+              "properties": {
+                "addressPrefix": "[parameters('SubNet')]",
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Enabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            }
+          ],
+          "virtualNetworkPeerings": [],
+          "enableDdosProtection": false,
+          "enableVmProtection": false
+        }
+      },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2020-05-01",
+      "name": "[concat(parameters('vnet_name'), '/','default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnet_name'))]"
+      ],
+      "properties": {
+        "addressPrefix": "[parameters('SubNet')]",
+        "delegations": [],
+        "privateEndpointNetworkPolicies": "Enabled",
+        "privateLinkServiceNetworkPolicies": "Enabled"
+      }
+    }    
+    ]
+  }
