@@ -1,0 +1,81 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "StorageAccountName": {
+      "defaultValue": "sa812",
+      "type": "string",
+      "metadata": {
+        "description": "Storage Account name should be with unique name"
+      }
+
+    },
+    "Location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Describes the location of the storage account"
+      }
+    },
+    "Container1Name": {
+      "type": "string",
+      "metadata": {
+        "description": "Describes the name of the container1"
+      }
+    },
+    "Container2Name": {
+      "type": "string",
+      "metadata": {
+        "description": "Describes the name of the container2"
+      }
+    },
+    "AccessTier": {
+      "type": "string",
+      "defaultValue": "Hot",
+      "metadata": {
+        "description": "Describes the Hot or Cool"
+      }
+    }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "name": "[parameters('StorageAccountName')]",
+      "location": "[parameters('Location')]",
+      "tags": {
+        "displayName": "[parameters('StorageAccountName')]"
+      },
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "allowBlobPublicAccess": false,
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "enabled": false
+        },
+        "accessTier": "[parameters('AccessTier')]"
+
+      },
+      "resources": [        
+        {
+          "type": "blobServices/containers",
+          "apiVersion": "2019-06-01",
+          "name": "[concat('default/', parameters('Container2Name'))]",
+          "dependsOn": [
+            "[parameters('StorageAccountName')]"
+          ],
+          "properties": {
+            "publicAccess": "None"
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": {}
+}
